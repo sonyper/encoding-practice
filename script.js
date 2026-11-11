@@ -36,9 +36,13 @@ const WORD_LISTS = [
   ["suitcase", "ladder", "pepper", "jacket", "bridge", "wallet"]
 ];
 
-const WORD_DURATION_MS = 5000;
-const DISTRACTOR_SECONDS = 30;
+const BASE_WORD_DURATION_MS = 5000;
+const BASE_DISTRACTOR_SECONDS = 30;
 const DISTRACTOR_STEP = 3;
+
+function scaledDuration(baseValue, reductionPercent) {
+  return Math.max(1, Math.round(baseValue * (1 - reductionPercent / 100)));
+}
 
 const state = {
   sessionId: makeSessionId(),
@@ -54,7 +58,8 @@ const state = {
   recallRaw: "",
   recallTokens: [],
   intrusions: [],
-  scoredWords: []
+  scoredWords: [],
+  timingReductionPercent: 10
 };
 
 // Build randomized block definitions.
@@ -107,15 +112,58 @@ function showWelcome() {
       <ol>
         <li>You will complete three word-learning blocks. The order of the three encoding strategies is randomized.</li>
         <li>Each block contains six words, shown one at a time.</li>
-        <li>After all three blocks, you will count backward for 30 seconds.</li>
+        <li>After all three blocks, you will count backward for a timed interval.</li>
         <li>Finally, you will freely recall as many of the 18 words as possible.</li>
       </ol>
     </div>
+
+    <div class="timing-control">
+      <label for="timingReduction">
+        <strong>Reduce all timed presentation/exposure periods by:</strong>
+        <span id="timingReductionValue">10%</span>
+      </label>
+      <input
+        id="timingReduction"
+        type="range"
+        min="10"
+        max="90"
+        step="10"
+        value="10"
+        aria-describedby="timingPreview"
+      />
+      <div class="range-labels" aria-hidden="true">
+        <span>10%</span>
+        <span>90%</span>
+      </div>
+      <p class="muted small" id="timingPreview"></p>
+    </div>
+
     <p class="muted small">
       Practice version: no information is transmitted anywhere. At the end, the data can be downloaded to this computer as CSV files.
     </p>
     <button id="startBtn">Begin</button>
   `;
+
+  const slider = document.getElementById("timingReduction");
+  const valueLabel = document.getElementById("timingReductionValue");
+  const preview = document.getElementById("timingPreview");
+
+  function updateTimingPreview() {
+    const reduction = Number(slider.value);
+    state.timingReductionPercent = reduction;
+    valueLabel.textContent = `${reduction}%`;
+
+    const wordSeconds = scaledDuration(BASE_WORD_DURATION_MS, reduction) / 1000;
+    const distractorSeconds = scaledDuration(BASE_DISTRACTOR_SECONDS, reduction);
+
+    preview.textContent =
+      `Resulting timing: each word = ${wordSeconds.toFixed(1)} seconds; ` +
+      `distractor task = ${distractorSeconds} seconds.`;
+  }
+
+  slider.addEventListener("input", updateTimingPreview);
+  updateTimingPreview();
+
   document.getElementById("startBtn").addEventListener("click", showBlockInstructions);
 }
 
@@ -129,7 +177,7 @@ function showBlockInstructions() {
       <h3>${strategy.label}</h3>
       <p>${strategy.instruction}</p>
     </div>
-    <p>Six words will appear, one at a time. Each word will remain on the screen for 5 seconds.</p>
+    <p>Six words will appear, one at a time. Each word will remain on the screen for ${(scaledDuration(BASE_WORD_DURATION_MS, state.timingReductionPercent) / 1000).toFixed(1)} seconds.</p>
     <button id="beginBlockBtn">Begin this block</button>
   `;
   document.getElementById("beginBlockBtn").addEventListener("click", () => {
@@ -164,7 +212,7 @@ function showNextWord() {
   window.setTimeout(() => {
     state.currentWordIndex += 1;
     showNextWord();
-  }, WORD_DURATION_MS);
+  }, scaledDuration(BASE_WORD_DURATION_MS, state.timingReductionPercent));
 }
 
 function showBetweenBlocks() {
@@ -182,21 +230,21 @@ function showDistractorIntro() {
   app.innerHTML = `
     <h2>Distractor task</h2>
     <p>
-      For the next <strong>${DISTRACTOR_SECONDS} seconds</strong>, count backward by
+      For the next <strong>${scaledDuration(BASE_DISTRACTOR_SECONDS, state.timingReductionPercent)} seconds</strong>, count backward by
       <strong>${DISTRACTOR_STEP}s</strong> from <strong>${state.distractorStart}</strong>.
     </p>
     <p>
       Type each next number and press Enter. For example, if you started at 938,
       you would enter 935, then 932, then 929, and so on.
     </p>
-    <button id="startDistractorBtn">Start 30-second task</button>
+    <button id="startDistractorBtn">Start timed task</button>
   `;
 
   document.getElementById("startDistractorBtn").addEventListener("click", runDistractor);
 }
 
 function runDistractor() {
-  let secondsLeft = DISTRACTOR_SECONDS;
+  let secondsLeft = scaledDuration(BASE_DISTRACTOR_SECONDS, state.timingReductionPercent);
 
   app.innerHTML = `
     <h2>Count backward by ${DISTRACTOR_STEP}s</h2>
@@ -398,6 +446,9 @@ function downloadSummaryCsv() {
     session_start: state.sessionStart,
     session_end: state.sessionEnd,
     strategy_order: state.strategyOrder.join("|"),
+    timing_reduction_percent: state.timingReductionPercent,
+    word_duration_ms: scaledDuration(BASE_WORD_DURATION_MS, state.timingReductionPercent),
+    distractor_duration_seconds: scaledDuration(BASE_DISTRACTOR_SECONDS, state.timingReductionPercent),
     maintenance_list_id: state.blocks.find((b) => b.strategy === "maintenance").listId,
     self_reference_list_id: state.blocks.find((b) => b.strategy === "self_reference").listId,
     imagery_list_id: state.blocks.find((b) => b.strategy === "imagery").listId,
@@ -422,7 +473,9 @@ function downloadTrialCsv() {
     ...row,
     strategy_order: order,
     session_start: state.sessionStart,
-    session_end: state.sessionEnd
+    session_end: state.sessionEnd,
+    timing_reduction_percent: state.timingReductionPercent,
+    word_duration_ms: scaledDuration(BASE_WORD_DURATION_MS, state.timingReductionPercent)
   }));
 
   downloadCsv(`encoding_trials_${state.sessionId}.csv`, rows);

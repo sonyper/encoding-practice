@@ -192,3 +192,38 @@ code {
     margin-right: 0;
   }
 }
+
+
+.timing-control {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin: 18px 0;
+  background: #fafbfc;
+}
+
+.timing-control label {
+  display: block;
+  margin-bottom: 12px;
+}
+
+#timingReductionValue {
+  display: inline-block;
+  min-width: 3.5rem;
+  margin-left: 6px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.range-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
